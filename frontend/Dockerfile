@@ -4,7 +4,7 @@ WORKDIR /app
 
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 ENV COREPACK_ENABLE_STRICT=1
-RUN corepack enable && corepack prepare pnpm@11.1.2 --activate
+RUN corepack enable && corepack prepare pnpm@12.14.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
