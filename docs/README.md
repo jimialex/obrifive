@@ -1,0 +1,51 @@
+# Obrifive Docs
+
+Sitio de documentación técnica, aislado de la app principal. Se prerenderiza
+entero y se sirve como archivos estáticos.
+
+## Stack
+
+- React Router (framework mode) sobre Vite y Tailwind CSS v4.
+- Fumadocs: `fumadocs-mdx` para el contenido, `fumadocs-ui` con el layout
+  Notebook y `fumadocs-openapi` para la referencia de la API.
+- ZBSearch para la búsqueda estática y Mermaid para diagramas.
+
+## Comandos
+
+```bash
+just docs dev        # http://localhost:4321
+just docs typecheck  # typegen de React Router + tsc
+just docs build      # prerender de todas las rutas en build/client
+just docs preview    # sirve el build
+```
+
+## Estructura
+
+```text
+content/docs/        Contenido (.md y .mdx) organizado por pestañas
+  (empezar)/         Tutoriales; el grupo no añade segmento a la URL
+  guias/             Guías prácticas por área
+  conceptos/         Explicación: arquitectura, dominio, datos
+  referencia/        Comandos y contratos; api/ se genera desde OpenAPI
+  equipo/            Contrato del repositorio y ADRs (lo leen los agentes)
+openapi/openapi.json Snapshot del esquema FastAPI (`just backend openapi`)
+lib/                 Código de Node: OpenAPI y reescritura de enlaces
+app/                 Rutas, layout, búsqueda y rutas para LLMs
+```
+
+Las convenciones para escribir páginas están en
+[Escribir páginas](content/docs/guias/documentacion/escribir-paginas.mdx) y la
+referencia de la API en
+[Actualizar la referencia OpenAPI](content/docs/guias/documentacion/actualizar-openapi.mdx).
+
+## Estilo
+
+La paleta replica los tokens del producto (`DESIGN.md`, `frontend/src/app/globals.css`)
+sobre las variables `--color-fd-*` de Fumadocs en `app/app.css`, con Geist como
+tipografía y modo claro/oscuro. Mantén esa correspondencia al cambiar tokens.
+
+## Acceso
+
+El sitio no tiene login. Si su contenido debe ser privado, protégelo en el hosting
+(proxy con autenticación o acceso restringido): un guard en el cliente no protege
+archivos prerenderizados.

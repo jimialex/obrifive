@@ -1,0 +1,101 @@
+# Obrifive Development Commands
+# Ports: backend=8200, frontend=3000, docs=4321
+#
+# Commands are grouped into modules. Run them as `just <area> <command>`:
+#     just backend dev          just frontend dev          just docs dev
+#     just backend test unit    just backend new-migration "add table"
+#     just verify               # full cross-stack quality gate
+#
+# Run `just <area>` (e.g. `just backend`) to list everything in that area.
+
+set dotenv-load := false
+
+mod backend "just/backend.just"
+mod frontend "just/frontend.just"
+mod docs "just/docs.just"
+
+# Copier template tooling (canonical repo only; stripped from generated projects)
+mod? template "just/template.just"
+
+# List available commands
+default:
+    @just --list
+
+# ─── ALL PROJECTS ───────────────────────────────────────────────
+
+# Start backend + frontend + docs together (logs interleaved)
+dev-all:
+    just backend dev & just frontend dev & just docs dev & wait
+
+# Build backend + frontend + docs
+build-all:
+    just backend build
+    just frontend build
+    just docs build
+
+# Static checks, backend non-API tests and frontend verify (see equipo/verificacion.md)
+verify:
+    just agent-check
+    just backend check
+    just backend test
+    just frontend verify
+
+# Static checks only; never repairs skill drift or reformats sources
+check:
+    just agent-check
+    just backend check
+    just frontend check
+
+# Validate agent metadata/links/config and required skill copies
+agent-check:
+    python3 scripts/check_agent_config.py
+    python3 scripts/sync_skills.py --check
+
+# OpenSpec structural status (not product acceptance)
+change-status change:
+    node scripts/openspec.mjs status {{quote(change)}}
+
+# Strict OpenSpec structure; kind is change or spec
+spec-check item kind="change":
+    node scripts/openspec.mjs check {{quote(item)}} {{quote(kind)}}
+
+# ─── AGENT SKILLS ───────────────────────────────────────────────
+
+# Sync canonical skills to .agents/skills (scripts/skill_inventory.json)
+[positional-arguments]
+sync-skills *args:
+    python3 scripts/sync_skills.py "$@"
+
+# Run Claude Code trigger evals for skills with an evals/ suite (billed model calls)
+[positional-arguments]
+skill-evals *skills:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$#" -eq 0 ]; then
+        set -- $(for d in .claude/skills/*/evals; do basename "$(dirname "$d")"; done)
+    fi
+    status=0
+    for skill in "$@"; do
+        (cd ".claude/skills/$skill" && claude plugin eval . --ablation none --no-publish --trust-plugin --threshold 0.66) || status=1
+    done
+    exit "$status"
+
+# ─── DOCKER (cross-cutting) ─────────────────────────────────────
+
+# Stop the local backend stack (backend/docker-compose.yml) only; other stacks keep running
+stop-all:
+    cd backend && docker compose down 2>/dev/null; \
+    echo "Backend stack stopped"
+
+# DANGER: GLOBAL prune of every stopped container, unused network and dangling image on this Docker host, from ANY project. Never use as task cleanup.
+docker-prune-global:
+    docker system prune -f
+
+# Show running containers (name / ports / status)
+ps:
+    docker ps --format "table {{{{.Names}}}}\t{{{{.Ports}}}}\t{{{{.Status}}}}"
+
+# Real browser -> BFF -> API journey using an exclusive test stack
+[positional-arguments]
+integration *args:
+    python3 scripts/test_stack.py integration "$@"

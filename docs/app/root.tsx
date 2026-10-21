@@ -1,0 +1,78 @@
+import { RootProvider } from "fumadocs-ui/provider/react-router";
+import type { ReactNode } from "react";
+import type { LinksFunction } from "react-router";
+import {
+  isRouteErrorResponse,
+  Links,
+  Meta,
+  Outlet,
+  Scripts,
+  ScrollRestoration,
+} from "react-router";
+import { Search } from "@/components/search";
+import { uiTranslations } from "@/lib/i18n";
+import stylesheet from "./app.css?url";
+
+export const links: LinksFunction = () => [
+  { rel: "preconnect", href: "https://fonts.googleapis.com" },
+  {
+    rel: "preconnect",
+    href: "https://fonts.gstatic.com",
+    crossOrigin: "anonymous",
+  },
+  {
+    rel: "stylesheet",
+    href: "https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap",
+  },
+  { rel: "stylesheet", href: stylesheet },
+];
+
+export function Layout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="es" suppressHydrationWarning>
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <Meta />
+        <Links />
+      </head>
+      <body className="flex min-h-screen flex-col">
+        <RootProvider
+          i18n={{ locale: "es", translations: uiTranslations }}
+          search={{ SearchDialog: Search }}
+        >
+          {children}
+        </RootProvider>
+        <ScrollRestoration />
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+
+export default function App() {
+  return <Outlet />;
+}
+
+export function ErrorBoundary({ error }: { error: unknown }) {
+  const message = isRouteErrorResponse(error)
+    ? `${error.status} ${error.statusText}`
+    : error instanceof Error
+      ? error.message
+      : "Error inesperado";
+
+  return (
+    <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6">
+      <p className="text-sm font-medium text-fd-muted-foreground">
+        Obrifive Docs
+      </p>
+      <h1 className="mt-3 text-3xl font-semibold">
+        No se pudo cargar la página
+      </h1>
+      <p className="mt-4 text-fd-muted-foreground">{message}</p>
+      <a className="mt-6 text-sm font-medium text-fd-primary" href="/docs">
+        Volver a la documentación
+      </a>
+    </main>
+  );
+}

@@ -1,0 +1,332 @@
+name: Code Quality
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+      - dev
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  skills:
+    name: Agent skills
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check agent configuration before any repair
+        run: |
+          python3 scripts/check_agent_config.py
+          python3 scripts/sync_skills.py --check
+          python3 -m unittest discover -s scripts/tests -p 'test_sync_skills.py'
+          python3 -m unittest discover -s scripts/tests -p 'test_agent_config.py'
+
+  node-lts-policy:
+    name: Node LTS policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run policy tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_node_lts_policy.py'
+
+      - name: Verify Node.js pins
+        run: python3 scripts/node_lts_policy.py check
+
+  template:
+    name: Template round-trip
+    # Canonical repo only: the workflow travels into generated projects, but
+    # the template scaffolding (scripts/build_template.py) deliberately
+    # doesn't — without this guard their first pipeline would be red forever.
+    if: github.repository == 'Llamitai/wise'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+
+      # Fidelity (round-trip == repo) and anti-drift (no branding leftovers in
+      # a non-default render). Cheap; keeps scripts/branding_tokens.json honest
+      # long before a release triggers publish-template.yml.
+      - name: Build template and validate
+        run: python3 scripts/build_template.py --check
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: valkey/valkey:9.1
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      rabbitmq:
+        image: rabbitmq:4.3-management
+        env:
+          RABBITMQ_DEFAULT_USER: app
+          RABBITMQ_DEFAULT_PASS: app
+        ports:
+          - 5672:5672
+        options: >-
+          --user rabbitmq
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+          # v9 flipped this default to false; pinned to keep caches pruned.
+          prune-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Backend static gate (same entrypoint as just)
+        run: uv run --locked python scripts/check.py
+
+      - name: OpenAPI snapshot matches the FastAPI schema
+        run: uv run --locked python scripts/export_openapi.py --check ../docs/openapi/openapi.json
+
+      - name: Check migrations with exclusive databases
+        env:
+          POSTGRES_HOST: 127.0.0.1
+          POSTGRES_DB: postgres
+          PYTHONPATH: .
+        run: uv run --locked python scripts/check_migrations.py
+
+      - name: Unit tests (pytest)
+        env:
+          POSTGRES_HOST: 127.0.0.1
+          REDIS_HOST: 127.0.0.1
+          RABBITMQ_HOST: 127.0.0.1
+        run: uv run --locked pytest -m "not api"
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.1.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Frontend verification (same entrypoint as just)
+        run: pnpm verify
+
+      - name: Tooling regression tests
+        run: python3 -m unittest discover -s ../scripts/tests -p 'test_frontend_tooling.py'
+
+      - name: Install browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Frontend browser smoke
+        run: pnpm test:e2e
+
+  specs:
+    name: OpenSpec structure
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.1.2
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: python3 scripts/check_specs.py
+      - run: python3 -m unittest discover -s scripts/tests -p 'test_openspec.py'
+
+  integration:
+    name: Browser BFF API
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.1.2
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm -C frontend install --frozen-lockfile
+      - run: pnpm -C frontend exec playwright install --with-deps chromium
+      - name: API regression suite on the validated commit
+        run: python3 scripts/test_stack.py api
+      - run: python3 scripts/test_stack.py integration
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: browser-integration-${{ github.sha }}
+          path: frontend/tests/reports/playwright
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.1.2
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: docs/pnpm-lock.yaml
+      - run: pnpm -C docs install --frozen-lockfile
+      - run: pnpm -C docs check:static
+      - run: pnpm -C docs build
+
+  images:
+    name: Production image (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, frontend]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Same Dockerfile, target and cache scope as build_<service>.yml, never pushed.
+      - name: Build production image without pushing
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.service }}
+          file: ${{ matrix.service }}/Dockerfile
+          target: production
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  workflow-lint:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: actionlint (with shellcheck)
+        run: >-
+          docker run --rm -v "$PWD:/repo" -w /repo
+          rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+          -color
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: false
+
+      - name: zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uvx zizmor@1.30.1 --format github .github/workflows
+
+  required:
+    name: Required checks
+    if: always()
+    needs: [skills, node-lts-policy, template, backend, frontend, specs, integration, docs, images, workflow-lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail for missing, cancelled or failed required jobs
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          CANONICAL: ${{ github.repository == 'Llamitai/wise' }}
+        run: |
+          python3 - <<'PYCODE'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          for name, result in results.items():
+              expected = 'skipped' if name == 'template' and os.environ['CANONICAL'] != 'true' else 'success'
+              if result['result'] != expected:
+                  raise SystemExit(f"Required job {name}: {result['result']} (expected {expected})")
+          PYCODE

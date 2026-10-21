@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "codegraph": {
+      "command": "codegraph",
+      "args": ["serve", "--mcp"]
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@1.10.1"]
+    },
+    "shadcn": {
+      "command": "./frontend/node_modules/.bin/shadcn",
+      "args": ["mcp"]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@0.0.82"]
+    },
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"
+      }
+    },
+    "tailwindcss-server": {
+      "command": "./frontend/node_modules/.bin/tailwindcss-mcp",
+      "args": [],
+      "env": {
+        "TAILWIND_VERSION": "4"
+      }
+    }
+  }
+}

@@ -1,0 +1,147 @@
+# Mirror of .github/workflows/quality.yml
+# Runs on merge requests and on pushes to main/dev (and manual "Run pipeline").
+
+.quality-rules: &quality-rules
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+  - if: $CI_PIPELINE_SOURCE == "web"
+
+# --- Agent skills -----------------------------------------------------------
+quality:skills:
+  stage: quality
+  image: python:3.14-slim
+  rules: *quality-rules
+  script:
+    - python3 scripts/check_agent_config.py
+    - python3 scripts/sync_skills.py --check
+    - python3 -m unittest discover -s scripts/tests -p 'test_sync_skills.py'
+    - python3 -m unittest discover -s scripts/tests -p 'test_agent_config.py'
+
+# --- Template: Copier round-trip + branding leftover checks ------------------
+# `exists` keeps this job out of generated projects: they ship this CI file
+# verbatim but the template scaffolding (scripts/build_template.py) is
+# deliberately excluded from the template.
+quality:template:
+  stage: quality
+  image: python:3.14
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      exists: [scripts/build_template.py]
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"
+      exists: [scripts/build_template.py]
+    - if: $CI_PIPELINE_SOURCE == "web"
+      exists: [scripts/build_template.py]
+  before_script:
+    - pip install --quiet "copier>=9.6,<10"
+  script:
+    - python3 scripts/build_template.py --check
+
+# --- Backend: ruff + ty + import-linter + unit tests ------------------------
+quality:backend:
+  stage: quality
+  image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim
+  rules: *quality-rules
+  services:
+    - name: postgres:17
+      alias: postgres
+  variables:
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+    POSTGRES_DB: postgres
+    POSTGRES_HOST: postgres
+    UV_CACHE_DIR: "$CI_PROJECT_DIR/.uv-cache"
+  cache:
+    key:
+      files:
+        - backend/uv.lock
+    paths:
+      - .uv-cache
+  before_script:
+    - cd backend
+    - uv sync --locked
+  script:
+    - uv run --locked python scripts/check.py
+    - PYTHONPATH=. uv run --locked python scripts/check_migrations.py
+    - uv run --locked pytest -m "not api"
+
+# --- Frontend: tsc + biome + vitest + boundaries + build --------------------
+quality:frontend:
+  stage: quality
+  image: node:24-slim
+  rules: *quality-rules
+  variables:
+    COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+  cache:
+    key:
+      files:
+        - frontend/pnpm-lock.yaml
+    paths:
+      - frontend/.pnpm-store
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@11.1.2 --activate
+    - cd frontend
+    - pnpm config set store-dir .pnpm-store
+    - pnpm install --frozen-lockfile
+  script:
+    - pnpm verify
+    - pnpm exec playwright install --with-deps chromium
+    - pnpm test:e2e
+
+quality:node-policy:
+  stage: quality
+  image: python:3.14-slim
+  rules: *quality-rules
+  script:
+    - python3 -m unittest discover -s scripts/tests -p 'test_node_lts_policy.py'
+    - python3 scripts/node_lts_policy.py check
+
+quality:specs:
+  stage: quality
+  image: node:24-bookworm
+  rules: *quality-rules
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@11.1.2 --activate
+    - apt-get update && apt-get install -y python3
+    - pnpm install --frozen-lockfile
+  script:
+    - python3 scripts/check_specs.py
+    - python3 -m unittest discover -s scripts/tests -p 'test_openspec.py'
+
+quality:docs:
+  stage: quality
+  image: node:24-bookworm
+  rules: *quality-rules
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@11.1.2 --activate
+    - pnpm -C docs install --frozen-lockfile
+  script:
+    - pnpm -C docs types:check
+    - pnpm -C docs build
+
+integration:browser:
+  stage: test
+  image: node:24-bookworm
+  rules: *quality-rules
+  services: [docker:27-dind]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ''
+  before_script:
+    - apt-get update && apt-get install -y python3 docker.io curl
+    - mkdir -p ~/.docker/cli-plugins
+    - curl -fsSL https://github.com/docker/compose/releases/download/v2.39.4/docker-compose-linux-x86_64 -o ~/.docker/cli-plugins/docker-compose
+    - chmod +x ~/.docker/cli-plugins/docker-compose
+    - corepack enable
+    - corepack prepare pnpm@11.1.2 --activate
+    - pnpm -C frontend install --frozen-lockfile
+    - pnpm -C frontend exec playwright install --with-deps chromium
+  script:
+    - python3 -m unittest discover -s scripts/tests -p 'test_frontend_tooling.py'
+    - python3 scripts/test_stack.py api
+    - python3 scripts/test_stack.py integration
+  artifacts:
+    when: always
+    paths: [frontend/tests/reports/playwright]

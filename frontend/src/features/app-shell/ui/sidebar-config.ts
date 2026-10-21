@@ -1,0 +1,112 @@
+import type { LineIconName } from "@/shared/ui/line-icon";
+
+export interface SidebarUser {
+  name: string;
+  email: string;
+  avatar: string;
+}
+
+export interface SidebarTeam {
+  name: string;
+  /** Semantic Lineicons key rendered by LineIcon. */
+  logo: LineIconName;
+  plan: string;
+}
+
+export interface SidebarNavItem {
+  i18nKey: string;
+  url: string;
+}
+
+export interface SidebarNavMainItem extends SidebarNavItem {
+  /** Semantic Lineicons key rendered by LineIcon. */
+  icon: LineIconName;
+  isActive?: boolean;
+  disabled?: boolean;
+  requiredPermission?: string;
+  items?: SidebarNavItem[];
+}
+
+export interface SidebarProject {
+  i18nKey: string;
+  url: string;
+  /** Semantic Lineicons key rendered by LineIcon. */
+  icon: LineIconName;
+  disabled?: boolean;
+  requiredPermission?: string;
+}
+
+export interface SidebarConfig {
+  user: SidebarUser;
+  teams: SidebarTeam[];
+  navMain: SidebarNavMainItem[];
+  projects: SidebarProject[];
+}
+
+export const sidebarConfig: SidebarConfig = {
+  user: {
+    name: "shadcn",
+    email: "m@example.com",
+    avatar: "/avatars/user.png",
+  },
+  teams: [
+    {
+      name: "Obrifive",
+      logo: "tenant",
+      plan: "Enterprise",
+    },
+  ],
+  navMain: [
+    {
+      i18nKey: "members",
+      url: "/members",
+      icon: "members",
+      requiredPermission: "tenant_users.view",
+    },
+    {
+      i18nKey: "roles",
+      url: "/roles",
+      icon: "roles",
+      requiredPermission: "tenant_roles.view",
+    },
+  ],
+  projects: [
+    {
+      i18nKey: "settings",
+      url: "/settings",
+      icon: "settings",
+      requiredPermission: "tenant_settings.view",
+    },
+  ],
+};
+
+export interface ShellRoute {
+  /** Top-level path the sidebar highlights. */
+  activePath: string;
+  /** Catalog namespace and key of the breadcrumb label. */
+  label: { namespace: "Nav" | "NavUser"; key: string };
+}
+
+const shellRoutes: ShellRoute[] = [
+  ...sidebarConfig.navMain,
+  ...sidebarConfig.projects,
+].map((item) => ({
+  activePath: item.url,
+  label: { namespace: "Nav", key: item.i18nKey },
+}));
+
+shellRoutes.push({
+  activePath: "/profile",
+  label: { namespace: "NavUser", key: "profile" },
+});
+
+/** Resolves the shell route that owns a pathname, including nested pages. */
+export function resolveShellRoute(pathname: string): ShellRoute | null {
+  return (
+    shellRoutes.find(
+      (route) =>
+        pathname === route.activePath ||
+        pathname.startsWith(`${route.activePath}/`)
+    ) ?? null
+  );
+}

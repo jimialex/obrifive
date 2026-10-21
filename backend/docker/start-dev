@@ -1,0 +1,7 @@
+#!/bin/bash
+
+set -o errexit
+set -o nounset
+
+# The deferred-command worker runs as its own compose service (`worker`).
+exec uvicorn config.main:app --host=0.0.0.0 --port=8200 --reload

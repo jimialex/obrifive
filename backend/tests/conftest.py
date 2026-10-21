@@ -1,0 +1,119 @@
+import os
+import re
+from collections.abc import AsyncGenerator
+from uuid import UUID, uuid4
+
+import pytest
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from src.common.application.helpers.datetimes import utc_now
+from src.common.domain.enums.common import Environment
+from src.common.domain.enums.tenants import TenantStatus
+from src.common.domain.models.tenants.tenant import Tenant
+from src.common.settings import settings
+
+TEST_DB_NAME = os.environ.get("TEST_DATABASE_NAME", f"obrifive_test_{uuid4().hex}")
+if not re.fullmatch(r"[a-z][a-z0-9_]{0,62}", TEST_DB_NAME) or "_test_" not in TEST_DB_NAME:
+    raise ValueError("TEST_DATABASE_NAME must be an exclusive SQL identifier containing _test_")
+
+# Override settings BEFORE any DatabaseConfig is built so no test ever touches
+# the dev database. `get_database_config()` reads `settings.async_database_url`
+# lazily, so mutating the singleton here is sufficient.
+settings.POSTGRES_DB = TEST_DB_NAME
+settings.ENVIRONMENT = Environment.testing
+
+import src.common.database.models  # noqa: E402,F401  registers all ORM models on Base.metadata
+from src.common.database.config import DatabaseConfig, get_database_config  # noqa: E402
+from src.common.database.mixins.common import Base  # noqa: E402
+
+
+def _admin_database_url() -> str:
+    return (
+        f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+        f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/postgres"
+    )
+
+
+async def _ensure_test_database_exists() -> None:
+    engine = create_async_engine(_admin_database_url(), isolation_level="AUTOCOMMIT")
+    try:
+        async with engine.connect() as conn:
+            exists = await conn.scalar(
+                text("SELECT 1 FROM pg_database WHERE datname = :name"),
+                {"name": TEST_DB_NAME},
+            )
+            if exists:
+                raise RuntimeError(f"Refusing to reuse an existing test database: {TEST_DB_NAME}")
+            await conn.execute(text(f'CREATE DATABASE "{TEST_DB_NAME}"'))
+    finally:
+        await engine.dispose()
+
+
+async def _drop_test_database() -> None:
+    engine = create_async_engine(_admin_database_url(), isolation_level="AUTOCOMMIT")
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text(f'DROP DATABASE IF EXISTS "{TEST_DB_NAME}" WITH (FORCE)'))
+    finally:
+        await engine.dispose()
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    for item in items:
+        if {"setup_database", "async_session", "session_maker", "database_config"} & set(item.fixturenames):
+            item.add_marker(pytest.mark.db)
+
+
+@pytest.fixture(scope="session")
+async def database_config() -> AsyncGenerator[DatabaseConfig]:
+    """One engine for the whole run; the event loop is session-scoped (pyproject)."""
+    assert settings.POSTGRES_DB == TEST_DB_NAME, (
+        f"Refusing to run: POSTGRES_DB is {settings.POSTGRES_DB!r}, expected {TEST_DB_NAME!r}."
+    )
+
+    await _ensure_test_database_exists()
+
+    db_config = get_database_config()
+    try:
+        async with db_config.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        yield db_config
+    finally:
+        await db_config.dispose()
+        await _drop_test_database()
+
+
+@pytest.fixture(scope="session")
+async def setup_database(database_config: DatabaseConfig) -> None:
+    return None
+
+
+@pytest.fixture
+def session_maker(setup_database: None, database_config: DatabaseConfig) -> async_sessionmaker[AsyncSession]:
+    """Opens independent sessions, e.g. to observe what another session committed."""
+    return database_config.session_maker
+
+
+@pytest.fixture(scope="function")
+async def async_session(session_maker: async_sessionmaker[AsyncSession]) -> AsyncGenerator[AsyncSession]:
+    async with session_maker() as session:
+        yield session
+
+
+@pytest.fixture
+def tenant_id() -> UUID:
+    return uuid4()
+
+
+@pytest.fixture
+def tenant(tenant_id: UUID) -> Tenant:
+    return Tenant(
+        uuid=tenant_id,
+        owner_id=uuid4(),
+        name="Test Company",
+        slug="test-company",
+        status=TenantStatus.ACTIVE,
+        created_at=utc_now(),
+        updated_at=utc_now(),
+    )

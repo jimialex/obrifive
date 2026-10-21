@@ -1,0 +1,49 @@
+# Obrifive Frontend
+
+App web autenticada (paquete `obrifive-web`): UI base para autenticación,
+tenants, miembros, roles, settings, perfil y superuser. Sin superficie de
+marketing. Puerto local `3000`.
+
+## Stack
+Next.js 16 (App Router) · React 19 · TypeScript 7 · Tailwind CSS v4 · shadcn + Base UI ·
+Zustand · TanStack Query · axios · zod · react-hook-form · next-intl.
+Lint/format con **Biome** · unit con **Vitest** · e2e con **Playwright**. Gestor: `pnpm` (Node ≥ 24).
+
+## Comandos (`just frontend <cmd>`)
+```bash
+just frontend dev              # dev server (:3000)
+just frontend build            # build de producción
+just frontend install          # instalar dependencias (pnpm)
+just frontend test             # unit tests (vitest)
+just frontend check            # estático sin autofix: tsc + Biome check + límites de import
+just frontend verify           # check estático + vitest + build
+just frontend lint             # Biome con autofix seguro (modifica archivos)
+just frontend format           # Biome format --write (modifica archivos)
+just frontend e2e              # Playwright · e2e-ui / e2e-headed / e2e-spec <spec>
+just frontend new-feature <n>  # crea el esqueleto de un feature
+```
+`just frontend` lista todo.
+
+## Reglas obligatorias (para agentes)
+- **BFF**: el código de navegador (`"use client"`, hooks, handlers) **nunca** llama al backend
+  directo vía `Settings.apiBaseUrl` / `NEXT_PUBLIC_*`. Va por una ruta BFF same-origin en
+  `src/app/api/**/route.ts` usando los helpers HTTP de `src/shared/http/**`.
+  Referencia canónica: login → `/api/auth/login` → BFF → `serverHttp`.
+- Tráfico cliente ya autenticado: usa clientes same-origin de `src/shared/http/**`. Nunca
+  instancies axios contra `Settings.apiBaseUrl` desde un módulo cliente.
+- **Imports absolutos** `@/...` para cruces entre capas; evita imports relativos largos.
+- Botones con carga: usa el estado `loading` del `Button` compartido.
+- Features nuevas: los hooks llaman `serverHttp`/`authHttp` vía BFF; no agregues interfaces
+  `domain/repositories` ni wrappers `infrastructure/repositories/http-*`.
+
+## Estructura (`src/`)
+- `app/` — App Router: grupos `(protected)`/`(public)` y **rutas BFF** `api/**/route.ts`.
+- `features/` — slices por flujo: app-shell, auth, tenants, members, roles, settings, profile y superuser.
+- `entities/` — entidades compartidas entre features.
+- `shared/` — UI base, HTTP, config, providers, catálogos y helpers genéricos (sin dominio ni stores).
+
+## Docs profundas
+- [Arquitectura frontend](../docs/content/docs/conceptos/arquitectura-frontend.md):
+  contrato vigente (estructura, límites, HTTP/BFF, caché, testing, deuda conocida).
+- [Roadmap frontend](../docs/content/docs/conceptos/roadmap-frontend.md):
+  ideas objetivo que aún no son contrato.

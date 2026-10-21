@@ -1,0 +1,159 @@
+# Obrifive
+
+The canonical source for a multi-tenant B2B SaaS starter. This repository
+contains the FastAPI API, Next.js app, documentation site, development tooling,
+and the builder that publishes a versioned Copier template. Generated products
+add their own domain features on top of this core.
+
+## Current core
+
+| Area | What is available |
+| --- | --- |
+| Auth and users | Login, logout, refresh, Google OAuth, password reset, sessions, and profile management |
+| Tenancy | Tenants, settings/avatar, members, invitations, roles, and superuser onboarding |
+| Permissions | Checks are modeled but do not deny access while `PERMISSIONS_ENABLED = False`; server-side tenant membership is enforced |
+| Assets | S3 storage is wired in; local development uses RustFS. A disk adapter exists but is not wired in |
+| Messaging | SMTP and RabbitMQ worker scaffolding for deferred commands |
+| Internal admin | Directus runs as a separate service |
+| Frontend | Authenticated Next.js app; browser requests stay same-origin under `/api` |
+| Docs | React Router + Fumadocs site with an API reference generated from the FastAPI schema |
+
+The [project profile](docs/content/docs/equipo/perfil-del-proyecto.md) records
+the active capabilities and contracts. Runtime versions come from
+[`backend/pyproject.toml`](backend/pyproject.toml),
+[`frontend/package.json`](frontend/package.json), and
+[`docs/package.json`](docs/package.json).
+
+## Repository layout
+
+```text
+backend/          FastAPI API, worker, migrations, and local Compose stack
+frontend/         Next.js application and BFF routes
+docs/             Fumadocs site and OpenAPI snapshot
+template/         Copier questionnaire for the published mirror
+scripts/          Template builder, checks, and repository tooling
+.claude/skills/    Canonical project skills for Claude Code
+.agents/skills/    Versioned skill copies for Codex and OpenCode
+just/             Area-specific just recipes
+```
+
+`AGENTS.md` is the shared instruction source for Claude Code, Codex, and
+OpenCode; each app area has its own `AGENTS.md`. The MCP integrations in this
+repository are optional. Edit skills only in `.claude/skills/`, then run
+`just sync-skills` and `just agent-check`.
+
+## Create a project
+
+### Copier (recommended)
+
+Copier renders product names and records the source release in
+`.copier-answers.yml`, so later releases can be merged into the project:
+
+```bash
+uvx --from 'copier>=9.6,<10' copier copy --trust gh:Llamitai/saas-bootstrap-template my-app
+cd my-app
+uv lock --directory backend
+```
+
+`--trust` allows the template's first-copy tasks to create `backend/.env`
+and initialize Git. The backend lock must be regenerated before a production
+build because that image installs with `uv sync --locked`. Commit the initial
+project state before its first template update.
+
+### GitHub template or clone
+
+A copy made with GitHub's **Use this template** starts with neutral branding.
+Use the [`rename-project` skill](.claude/skills/rename-project/SKILL.md) to
+adapt it. This path has no Copier answers file and cannot run `copier update`;
+later changes need a reviewed manual port from a known canonical revision.
+
+## Sync an existing project
+
+The canonical repository publishes its Copier mirror,
+[`Llamitai/saas-bootstrap-template`](https://github.com/Llamitai/saas-bootstrap-template),
+only when a version tag passes the
+[`publish-template.yml`](.github/workflows/publish-template.yml) pipeline.
+Unreleased changes here are not available to generated projects. Each project
+updates separately; there is no automatic fleet-wide sync.
+
+| How the project was created | Update method |
+| --- | --- |
+| Copier, with valid `.copier-answers.yml` | Copier's three-way update from a published mirror tag |
+| GitHub template or clone, without Copier metadata | Compare its known base revision with a published release and port the relevant changes manually |
+
+For a Copier project, work from its Git root with a clean working tree. Check
+that `_src_path` in `.copier-answers.yml` points to
+`Llamitai/saas-bootstrap-template`, then run:
+
+```bash
+git status --short
+uvx --from 'copier>=9.6,<10' copier update --defaults --trust
+```
+
+Copier selects the latest published stable tag by default. To choose one
+published release, add `--vcs-ref vX.Y.Z`. Do not edit
+`.copier-answers.yml` yourself. After the update, review `git diff`,
+resolve conflict markers or `*.rej` files, regenerate affected lockfiles
+(`uv lock --directory backend` when backend dependencies changed), and run
+the checks required by the changed contracts. Keep product-specific changes
+and real `.env` files intact.
+
+For a GitHub-template copy, first identify the exact canonical SHA or release
+used to create it. In a checkout of `Llamitai/wise`, compare that revision
+with the desired published `vX.Y.Z` tag using `git diff`. Port the relevant
+changes into the product, adapt its branding, and verify the affected
+contracts. If the starting revision is unknown, establish it before applying
+a guessed patch; do not create a fake `.copier-answers.yml`.
+
+The [`sync-template` skill](.claude/skills/sync-template/SKILL.md) guides
+both routes, including source verification, conflict review, and checks. Invoke
+it as `$sync-template` in Codex, `/sync-template` in Claude Code, or ask
+OpenCode to use `sync-template`. It is stored in `.claude/skills/` and copied
+to `.agents/skills/`. Projects created before the release containing this
+skill must first receive it through a Copier update or a manual port.
+
+## Run locally
+
+Prerequisites: Docker with Compose, `just`, **Node.js 24** LTS (pinned in
+[`.nvmrc`](.nvmrc)), the pnpm version in the package manifests, and `uv`
+for lockfile and local template operations. Run commands from the Git root.
+
+```bash
+cp frontend/.env.example frontend/.env  # first run only
+just backend dev                         # creates backend/.env if absent; API :8200
+```
+
+In another terminal, initialize the local data and storage:
+
+```bash
+just backend migrate
+just backend seed
+just backend minio-setup
+just frontend install
+just frontend dev                        # app :3000
+```
+
+The `minio-setup` recipe configures the S3 bucket in local RustFS. The seed
+creates a local owner login: `owner@obrifive.com` / `12345678x`. For the docs
+site, run `just docs install` and `just docs dev` (`:4321`).
+
+Run `just backend`, `just frontend`, or `just docs` to list area recipes.
+`just check` runs static checks without source autofixes; `just verify`
+adds backend non-API tests and frontend tests/build. API, browser, migration,
+and docs checks are selected by impact in the
+[verification guide](docs/content/docs/equipo/verificacion.md).
+`just template check` validates the generated template in this canonical
+repository when Copier tooling is available.
+
+## Architecture
+
+- Backend uses Clean Architecture and DDD. Its
+  [README](backend/README.md) describes modules, migrations, and operations.
+- Frontend uses feature layers and same-origin `/api` requests. See the
+  [frontend architecture](docs/content/docs/conceptos/arquitectura-frontend.md).
+- Documentation and the API reference live under `docs/`. HTTP contract
+  changes require `just backend openapi`.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).

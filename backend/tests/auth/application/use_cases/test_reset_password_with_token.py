@@ -1,0 +1,82 @@
+from unittest.mock import call, create_autospec
+from uuid import uuid4
+
+import pytest
+from expects import equal, expect
+
+from src.auth.application.use_cases.password_reset.resetter import PasswordResetter
+from src.common.domain.enums.jwt import JwtTokenScope
+from src.common.domain.exceptions.common import InvalidOrExpiredTokenError
+from src.common.domain.services.token_builder import JwtTokenClaims
+from src.users.domain.repositories.user import UserRepository
+
+
+@pytest.fixture
+def user_repository():
+    return create_autospec(spec=UserRepository, spec_set=True, instance=True)
+
+
+def _claims(sub: str) -> JwtTokenClaims:
+    return JwtTokenClaims(
+        iss="obrifive",
+        sub=sub,
+        iat=1700000000,
+        exp=1700003600,
+        jti="test-jti",
+        ns="JWT",
+        scope=JwtTokenScope.PASSWORD_RESET,
+    )
+
+
+def _resetter(user_repository, token_service, token: str) -> PasswordResetter:
+    return PasswordResetter(
+        token=token,
+        new_password="newSecret123",
+        user_repository=user_repository,
+        token_service=token_service,
+    )
+
+
+async def test_execute__valid_token_sets_password_and_closes_every_session(user_repository, token_service):
+    user_id = uuid4()
+    token_service.consume_one_shot_token.return_value = _claims(str(user_id))
+    user_repository.set_password.return_value = True
+
+    await _resetter(user_repository, token_service, token="valid.token").execute()
+
+    token_service.consume_one_shot_token.assert_awaited_once_with("valid.token", scope=JwtTokenScope.PASSWORD_RESET)
+    user_repository.set_password.assert_awaited_once_with(user_id=user_id, new_password="newSecret123")
+    expect(token_service.revoke_all_sessions.await_args_list).to(equal([call(sub=str(user_id), namespace="USER")]))
+
+
+async def test_execute__invalid_or_replayed_token_raises(user_repository, token_service):
+    """A token that does not verify, or whose single use was already consumed."""
+    token_service.consume_one_shot_token.return_value = None
+
+    with pytest.raises(InvalidOrExpiredTokenError):
+        await _resetter(user_repository, token_service, token="bad.token").execute()
+
+    user_repository.set_password.assert_not_awaited()
+    token_service.revoke_all_sessions.assert_not_awaited()
+
+
+async def test_execute__malformed_sub_raises(user_repository, token_service):
+    token_service.consume_one_shot_token.return_value = _claims("not-a-uuid")
+
+    with pytest.raises(InvalidOrExpiredTokenError):
+        await _resetter(user_repository, token_service, token="valid.token").execute()
+
+    user_repository.set_password.assert_not_awaited()
+
+
+async def test_execute__user_disappeared_raises(user_repository, token_service):
+    """Defensive: if the user was removed between issuing and consuming
+    the token, set_password returns False — we surface it as
+    invalid/expired rather than crashing."""
+    token_service.consume_one_shot_token.return_value = _claims(str(uuid4()))
+    user_repository.set_password.return_value = False
+
+    with pytest.raises(InvalidOrExpiredTokenError):
+        await _resetter(user_repository, token_service, token="valid.token").execute()
+
+    token_service.revoke_all_sessions.assert_not_awaited()

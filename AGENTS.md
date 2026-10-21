@@ -1,0 +1,112 @@
+# Project working map
+
+This is a FastAPI + Next.js unirepo. Run project commands from the Git root.
+[The project profile](docs/content/docs/equipo/perfil-del-proyecto.md) is the
+source for the current Obrifive core, active capabilities, public
+contracts, setup and authoritative manifests. Read the relevant section when
+the task touches those facts. Examples, tests and docs must describe this
+boilerplate's current core.
+Remove unrelated product material instead of archiving it in this repository.
+
+## Setup and commands
+
+- Discover recipes with `just backend`, `just frontend`, `just docs`.
+- Local run: `just backend dev` (creates `backend/.env`, Docker stack, API on
+  :8200), `just frontend dev` (:3000), `just docs dev` (:4321).
+- Focused tests: `just backend test unit <paths>` (pytest paths relative to
+  `backend/`; needs Docker) and `just frontend test <filter>`.
+- `just check` is static; `just verify` adds backend tests and frontend
+  tests/build. API, browser, migration and docs checks stay explicit by impact;
+  [the verification guide](docs/content/docs/equipo/verificacion.md) selects them.
+- `quality`/`format`/`lint` recipes autofix files; review and CI use checks
+  without autofix. Optional lefthook hooks autofix and re-stage Biome/Ruff files;
+  they complement `just check` and CI.
+- Report commands, results and unverified behavior. Clean only owned resources;
+  worktrees do not isolate services. Never use `just docker-prune-global`, `just stop-all` or a
+  global prune as task cleanup.
+- Use Git/rg and focused reads when optional MCP/LSP tools are absent.
+
+## Area constitutions
+
+Each area has its own binding constitution. Read it before changing files there;
+the rules in this file apply everywhere.
+
+| Area | Constitution | Covers |
+| --- | --- | --- |
+| `backend/` | [backend/AGENTS.md](backend/AGENTS.md) | Clean Architecture/DDD, persistence, responses, sessions, Valkey/RabbitMQ, backend gates |
+| `frontend/` | [frontend/AGENTS.md](frontend/AGENTS.md) | Feature layers, BFF/session rules, state, UI and design, frontend gates |
+| `docs/` | [docs/AGENTS.md](docs/AGENTS.md) | Site structure, content rules, ADRs, generated API reference, docs gates |
+
+## Cross-cutting contracts
+
+- Browser requests stay same-origin under `/api` (proxy rewrite to the backend
+  plus BFF route handlers). Verify both sides when an HTTP contract changes and
+  refresh `docs/openapi/openapi.json` with openapi-sync (`just backend openapi`);
+  CI rejects a stale snapshot.
+- Preserve the auth, tenancy, session and cache-scope contracts in the profile;
+  permission checks exist but stay gated by `PERMISSIONS_ENABLED`. A skill
+  example does not introduce or remove product rules.
+- [ADR 0008](docs/content/docs/equipo/adr/0008-arquitectura-base-y-reglas-comprobadas.md)
+  explains the core decisions. Each area constitution lists its enforced gates;
+  CI also builds the production images and runs actionlint/zizmor on workflows.
+  A failing gate is a project rule, not noise.
+
+## Development workflows
+
+- The seven project workflows are define-change, backend-change,
+  frontend-change, schema-change, verify-change, review-change and
+  validate-change.
+- Use define-change to establish scope, observable acceptance and verification.
+  Reuse prior definition/authorization; a precise implementation request does not
+  need another interview or approval.
+- Use backend-change/frontend-change to build and refine their areas. Fullstack
+  work composes both under one acceptance contract. Use schema-change for data,
+  verify-change for tests/diagnosis, review-change for review without edits and
+  validate-change for acceptance against the need.
+- Functional work in either stack uses one OpenSpec change. Mechanical/docs work
+  records concise acceptance/evidence in the existing task/PR/conversation.
+- Build behavior through incremental red -> green -> refinement. Green checks,
+  valid specs, complete task checkboxes and archive do not alone prove acceptance.
+  Record evidence on the exact revision; renew affected results after changes.
+- Record new module boundaries, contracts, persistence, security or core-flow
+  decisions as Spanish [ADRs](docs/content/docs/equipo/adr/index.md).
+  Store them in `docs/content/docs/equipo/adr/` using the index's required sections;
+  external skill defaults do not create another ADR tree or replace this format.
+- OpenSpec skills and generated opsx commands are upstream-managed: do not edit
+  their content. The project workflows own orchestration and acceptance.
+  Before invoking sync/archive for completed work, establish verified/validated
+  closure through validate-change. Structural CLI output does not grant closure.
+- A single integrator owns the combined diff and closure. Delegation is optional
+  when authorized and useful for independent work. Writers need disjoint ownership
+  or worktrees; shared contracts, lockfiles, models, wiring and CI have one owner.
+- Commit, push, open PRs, merge, release or deploy only when the user asks.
+
+## Skills and client configuration
+
+Edit skills only in `.claude/skills/`; `.agents/skills/` is the single versioned
+copy, read by Codex and OpenCode and listed in `scripts/skill_inventory.json`.
+Never add `.codex/skills/` (Codex lists duplicate names) or `.opencode/skills/`
+(redundant). Claude Code, Codex and OpenCode support `AGENTS.md`, but their
+discovery paths differ; explicitly read the applicable area constitution before
+editing there. Never add a `CLAUDE.md` (agent-check rejects it).
+Client integrations (`.mcp.json`, context-mode) are optional conveniences, not
+prerequisites.
+After editing a skill, run `just agent-check` to observe the expected drift,
+then `just sync-skills` and `just agent-check` again. Commit sources and copies
+together. Do not distribute private paths, secrets or local trust state; client
+integrations are optional.
+
+## Template and style
+
+Canonical repository only: the public Copier mirror is generated by
+`scripts/build_template.py`, never edited manually. Branding/exclusions live in
+`scripts/branding_tokens.json`; questionnaire in `template/copier.yml`. Validate
+with `just template check` when these tools exist. Publishing is separate from
+acceptance; preserve canonical redeploy guards. Generated projects do not maintain
+or publish this template machinery.
+
+Documentation lives in the Fumadocs site; its rules are in
+[docs/AGENTS.md](docs/AGENTS.md). Code/instruction files and commit messages are English. `docs/content/`
+and module READMEs are Spanish. Python uses snake_case, type hints
+and async/await; TypeScript uses camelCase and functional components. Read runtime
+versions and design tokens from their sources instead of copying them here.

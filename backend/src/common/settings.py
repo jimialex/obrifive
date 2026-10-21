@@ -1,0 +1,245 @@
+import base64
+import secrets
+from typing import Annotated, Any, Self
+from urllib.parse import quote
+
+from pydantic import (
+    AnyUrl,
+    BeforeValidator,
+    Field,
+    HttpUrl,
+    computed_field,
+    model_validator,
+)
+from pydantic_core import MultiHostUrl
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from src.common.domain.enums.common import Environment, ProcessLabel, Stage
+
+
+def parse_items(v: Any) -> list[str]:
+    if isinstance(v, str) and not v.startswith("["):
+        return [i.strip() for i in v.split(",")]
+    if isinstance(v, list):
+        return v
+    return []
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_ignore_empty=True,
+        extra="ignore",
+        case_sensitive=True,
+    )
+
+    PROJECT_NAME: str = "Obrifive"
+    VERSION: str = "0.1.0"
+    DESCRIPTION: str = "Multi-tenant Obrifive API"
+
+    # Environment
+    STAGE: Stage = Stage.dev
+    ENVIRONMENT: Environment = Environment.development
+    PROCESS_LABEL: ProcessLabel = ProcessLabel.api
+    DEBUG: bool = False
+
+    # CORS Configuration
+    CORS_ORIGINS: Annotated[list[AnyUrl] | str, BeforeValidator(parse_items)] = []
+
+    # Security Configuration
+    JWT_SECRET_KEY: str = ""
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    JWT_REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ISSUER: str = "obrifive"
+    # Window in which a just-rotated refresh token returns the same new pair instead
+    # of 401, so concurrent refreshes (proxy + route handler, several instances) agree.
+    JWT_REFRESH_GRACE_SECONDS: int = 30
+    # Concurrent sessions per user; a login beyond it closes the least recently used.
+    JWT_MAX_SESSIONS_PER_USER: int = Field(default=1, ge=1)
+
+    # Common
+    SECRET_KEY: str = ""
+
+    # Database Configuration
+    POSTGRES_HOST: str = "postgres"
+    POSTGRES_PORT: int = 5432
+    POSTGRES_USER: str = "postgres"
+    POSTGRES_PASSWORD: str = "postgres"
+    POSTGRES_DB: str | None = None
+
+    # Redis Configuration
+    REDIS_HOST: str = "redis"
+    REDIS_PORT: int = 6379
+    REDIS_USER: str | None = None
+    REDIS_PASSWORD: str | None = None
+    REDIS_DB: int = 0
+    # Connection pool of the process-wide client (API lifespan and worker). Each
+    # process opens at most this many sockets; commands wait for a free one.
+    REDIS_MAX_CONNECTIONS: int = 50
+    REDIS_SOCKET_TIMEOUT: float = 5.0
+    REDIS_SOCKET_CONNECT_TIMEOUT: float = 5.0
+    # Seconds a pooled connection may sit idle before it is PINGed on checkout.
+    REDIS_HEALTH_CHECK_INTERVAL: int = 30
+
+    # RabbitMQ Configuration (deferred commands, `dispatch(..., run_async=True)`)
+    RABBITMQ_HOST: str = "rabbitmq"
+    RABBITMQ_PORT: int = 5672
+    RABBITMQ_USER: str = "app"
+    RABBITMQ_PASSWORD: str = "app"
+    RABBITMQ_VHOST: str = "/"
+    # Durable direct exchange and quorum queue; dead letters go to `<exchange>.dlx`
+    # and `<queue>.dlq`.
+    RABBITMQ_EXCHANGE: str = "commands"
+    RABBITMQ_QUEUE: str = "commands.default"
+    # Unacknowledged messages per worker process, i.e. its concurrency.
+    RABBITMQ_PREFETCH: int = 10
+    # Deliveries of a failing command before it is dead-lettered (first try included).
+    # Also the queue's x-delivery-limit, the broker-side net for crashing consumers.
+    RABBITMQ_DELIVERY_LIMIT: int = 5
+    # Base of the exponential pause before a failed message is returned (capped at 30s).
+    RABBITMQ_RETRY_BACKOFF_SECONDS: float = 1.0
+    RABBITMQ_PUBLISH_TIMEOUT_SECONDS: float = 10.0
+    # After SIGTERM the worker waits this long for in-flight commands; unfinished
+    # ones are cancelled and redelivered. Keep the container stop grace above it.
+    RABBITMQ_SHUTDOWN_GRACE_SECONDS: float = 30.0
+
+    PAGINATION_PAGE_SIZE: int = 25
+
+    # Google OAuth Configuration
+    GOOGLE_CLIENT_ID: str | None = None
+    GOOGLE_CLIENT_SECRET: str | None = None
+    GOOGLE_REDIRECT_URI: str | None = None
+    GOOGLE_AUTH_URL: str = "https://accounts.google.com/o/oauth2/auth"
+    GOOGLE_TOKEN_URL: str = "https://oauth2.googleapis.com/token"
+    GOOGLE_USERINFO_URL: str = "https://www.googleapis.com/oauth2/v3/userinfo"
+    GOOGLE_CERTS_URL: str = "https://www.googleapis.com/oauth2/v3/certs"
+
+    # Email Configuration
+    SMTP_TLS: bool = True
+    SMTP_PORT: int = 587
+    SMTP_HOST: str | None = None
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: str | None = None
+    DEFAULT_FROM_EMAIL: str | None = None
+
+    # -> AWS S3 CONFIGURATION
+    AWS_S3_ENDPOINT_URL: str | None = None
+    AWS_S3_PUBLIC_URL: str | None = None
+    AWS_ACCESS_KEY_ID: str | None = None
+    AWS_SECRET_ACCESS_KEY: str | None = None
+    AWS_SESSION_TOKEN: str | None = None
+    AWS_S3_REGION_NAME: str = "us-east-1"
+    AWS_STORAGE_BUCKET_NAME: str | None = None
+    AWS_CLOUDFRONT_DOMAIN: str | None = None
+
+    # -> ADMIN CONFIGURATION
+    ADMIN_LOGO_URL: str = "https://preview.tabler.io/static/logo-white.svg"
+    ADMIN_LOGIN_LOGO_URL: str = "https://preview.tabler.io/static/logo.svg"
+
+    # -> FRONTEND CONFIGURATION
+    FRONTEND_HOST: str = "http://localhost:3000"
+
+    # -> MONITORING
+    SENTRY_DSN: HttpUrl | None = None
+    SENTRY_ENVIRONMENT: Stage = Stage.dev
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+    SENTRY_PROFILES_SAMPLE_RATE: float = 0.1
+    # Opt-in: when True Sentry attaches IPs, cookies, auth headers and user data.
+    SENTRY_SEND_DEFAULT_PII: bool = False
+
+    # Admin & Integrations
+    ADMIN_API_KEY: str = ""
+
+    @model_validator(mode="after")
+    def validate_secrets(self) -> Self:
+        if self.ENVIRONMENT.is_production:
+            required = (
+                "JWT_SECRET_KEY",
+                "SECRET_KEY",
+                "ADMIN_API_KEY",
+                "POSTGRES_PASSWORD",
+                "REDIS_PASSWORD",
+                "RABBITMQ_PASSWORD",
+            )
+            missing = [name for name in required if not getattr(self, name)]
+            if missing:
+                joined = ", ".join(missing)
+                raise ValueError(f"Missing required production secret(s): {joined}")
+
+            placeholder_markers = ("your-", "change-me", "here")
+            insecure: list[str] = []
+            for name in required:
+                value = str(getattr(self, name)).lower()
+                if any(marker in value for marker in placeholder_markers):
+                    insecure.append(f"{name} looks like a placeholder value")
+            for name in ("JWT_SECRET_KEY", "SECRET_KEY"):
+                if len(getattr(self, name)) < 32:
+                    insecure.append(f"{name} must be at least 32 characters")
+            if self.POSTGRES_PASSWORD == "postgres":
+                insecure.append("POSTGRES_PASSWORD must not be the default 'postgres'")
+            if self.RABBITMQ_PASSWORD in {"app", "guest"}:
+                insecure.append("RABBITMQ_PASSWORD must not be a default ('app' or 'guest')")
+            if insecure:
+                joined = "; ".join(insecure)
+                raise ValueError(f"Insecure production secret(s): {joined}")
+
+        if not self.JWT_SECRET_KEY:
+            self.JWT_SECRET_KEY = secrets.token_urlsafe(32)
+        if not self.SECRET_KEY:
+            self.SECRET_KEY = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+        if not self.ADMIN_API_KEY:
+            self.ADMIN_API_KEY = secrets.token_urlsafe(32)
+        return self
+
+    @computed_field
+    @property
+    def all_cors_origins(self) -> list[str]:
+        return [str(origin).rstrip("/") for origin in self.CORS_ORIGINS]
+
+    @computed_field
+    @property
+    def database_url(self) -> MultiHostUrl:
+        return MultiHostUrl.build(
+            scheme="postgresql+psycopg",
+            username=self.POSTGRES_USER,
+            password=self.POSTGRES_PASSWORD,
+            host=self.POSTGRES_HOST,
+            port=self.POSTGRES_PORT,
+            path=self.POSTGRES_DB,
+        )
+
+    @computed_field
+    @property
+    def async_database_url(self) -> MultiHostUrl:
+        return MultiHostUrl.build(
+            scheme="postgresql+asyncpg",
+            username=self.POSTGRES_USER,
+            password=self.POSTGRES_PASSWORD,
+            host=self.POSTGRES_HOST,
+            port=self.POSTGRES_PORT,
+            path=self.POSTGRES_DB,
+        )
+
+    @computed_field
+    @property
+    def redis_url(self) -> str:
+        if self.ENVIRONMENT.is_production:
+            return (
+                f"redis://{self.REDIS_USER}:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+            )
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+
+    @computed_field
+    @property
+    def rabbitmq_url(self) -> str:
+        user = quote(self.RABBITMQ_USER, safe="")
+        password = quote(self.RABBITMQ_PASSWORD, safe="")
+        vhost = quote(self.RABBITMQ_VHOST, safe="")
+        return f"amqp://{user}:{password}@{self.RABBITMQ_HOST}:{self.RABBITMQ_PORT}/{vhost}"
+
+    @property
+    def sentry_enabled(self) -> bool:
+        return bool(self.SENTRY_DSN and not self.ENVIRONMENT.is_local)
+
+
+settings = Settings()

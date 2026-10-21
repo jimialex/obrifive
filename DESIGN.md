@@ -1,0 +1,91 @@
+---
+name: Obrifive
+description: Multi-tenant SaaS starter with a restrained, trustworthy product UI.
+colors:
+  teal-primary: "oklch(0.59 0.095 180.54)"
+  teal-deep: "oklch(0.468 0.074 180.8)"
+  teal-tint: "oklch(0.951 0.018 186.07)"
+  ink: "oklch(0.222 0.029 253.225)"
+  shell-background: "#edf3f3"
+  surface: "oklch(0.984 0.002 252.121)"
+  header-surface: "#f7fafa"
+  muted: "oklch(0.945 0.005 252.232)"
+  card: "oklch(1 0 0)"
+  muted-foreground: "oklch(0.558 0.025 252.534)"
+  border: "oklch(0.905 0.011 252.311)"
+  border-soft: "#e1e8e6"
+  on-primary: "oklch(1 0 0)"
+  success: "oklch(0.626 0.139 155.038)"
+  warning: "oklch(0.77 0.18 75.998)"
+  destructive: "oklch(0.579 0.214 27.166)"
+typography:
+  display:
+    fontFamily: "Geist, Inter, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "1.875rem"
+    fontWeight: 600
+    lineHeight: 1.15
+    letterSpacing: "normal"
+  body:
+    fontFamily: "Geist, Inter, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 400
+    lineHeight: 1.5
+    letterSpacing: "normal"
+---
+
+# Design System: Obrifive
+
+## Direction
+
+The UI is a compact product workbench for authenticated SaaS operations. It
+should feel calm, precise and utilitarian: enough density for repeated admin
+work, enough polish to feel trustworthy, and no marketing composition inside the
+app shell.
+
+## Visual Rules
+
+- Use teal sparingly for active state, focus and primary action.
+- Prefer cool neutral surfaces, hairline borders and near-flat elevation.
+- Keep cards for repeated items, dialogs and genuinely framed tools.
+- Do not use decorative gradient blobs, glassmorphism, oversized heroes or generic SaaS illustration.
+- Keep text sizes proportional to the container; dashboards and settings screens need compact headings.
+
+## Tokens and themes
+
+- Live tokens are in `frontend/src/app/globals.css`: raw palette variables
+  (`--md3-*`) in `:root`, redefined under `.dark`, mapped to semantic Tailwind
+  tokens in `@theme inline`. Values in the front matter are the light theme.
+- Dark mode is class-based (`next-themes`, `attribute="class"`,
+  `defaultTheme="system"`). Every new surface must read correctly in both themes;
+  never hardcode a light-only color.
+- Components consume semantic tokens (`bg-background`, `bg-primary`,
+  `text-foreground`, `text-muted-foreground`, `border-border`,
+  `text-destructive`), not `--md3-*` variables. Direct `--md3-*` use is limited
+  to a few `shared/ui` primitives that have no semantic token yet (info, field
+  indicator, shell background); do not extend it to feature code.
+
+## Typography
+
+Geist is the intended face, but no font file is loaded yet (no `next/font`, no
+`@font-face`). The rendered stack is `--font-sans`: Geist or Inter only when
+installed locally, otherwise `ui-sans-serif`/`system-ui`. Loading Geist is
+pending; until then, do not tune layouts to Geist-specific metrics. Material
+Symbols Rounded is loaded from Google Fonts for icons.
+
+## Components
+
+- Navigation: icon + label rows, clear active state, tenant context visible.
+- Forms: labelled fields, inline validation, destructive actions separated from primary flows.
+- Tables/lists: optimized for scanning, with stable row height and explicit empty states.
+- Settings: segmented layout where each panel has one job.
+- Internal admin controls should use the same compact component language as the authenticated app.
+
+## Accessibility
+
+Target WCAG 2.1 AA. Preserve keyboard access, visible focus rings, semantic labels,
+touch targets, reduced-motion alternatives and readable contrast.
+
+Known debt: the root `viewport` in `frontend/src/app/layout.tsx` sets
+`maximumScale: 1`, which blocks pinch zoom on some mobile browsers and conflicts
+with WCAG 1.4.4 (Resize Text). Removing it needs its own change with a mobile
+check.

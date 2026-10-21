@@ -1,0 +1,7 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: v0.7.0
+_src_path: ./saas-bootstrap-template
+owner_email: owner@obrifive.com
+project_name: Obrifive
+project_slug: obrifive
+python_name: obrifive
