@@ -29,3 +29,4 @@ límites de módulos, contratos, persistencia, seguridad o flujos core.
 - [0007 — Documentación unificada en Fumadocs con referencia OpenAPI generada](0007-documentacion-unificada-en-fumadocs.md).
 - [0008 — Arquitectura base del núcleo y reglas comprobadas por herramientas](0008-arquitectura-base-y-reglas-comprobadas.md).
 - [0009 — Valkey para caché y RabbitMQ para colas](0009-valkey-para-cache-y-rabbitmq-para-colas.md).
+- [0010 — Catálogo de productos por tenant y cargas trazables](0010-catalogo-de-productos-por-tenant.md).
