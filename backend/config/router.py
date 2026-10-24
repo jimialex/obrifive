@@ -4,6 +4,7 @@ from src.admin.presentation.router import tasks_router
 from src.auth.presentation.router import auth_router
 from src.common.presentation.router import common_router, health_router
 from src.profile.presentation.router import me_router
+from src.products.presentation.router import products_router
 from src.tenants.presentation.router import invitations_router, tenant_router
 from src.users.presentation.router import user_router
 
@@ -15,6 +16,7 @@ api_router.include_router(health_router)
 api_router.include_router(user_router, prefix="/v1", tags=["users"])
 api_router.include_router(auth_router, prefix="/v1", tags=["auth"])
 api_router.include_router(me_router, prefix="/v1", tags=["me"])
+api_router.include_router(products_router, prefix="/v1", tags=["products"])
 api_router.include_router(tenant_router, prefix="/v1", tags=["tenants"])
 api_router.include_router(invitations_router, prefix="/v1", tags=["invitations"])
 api_router.include_router(tasks_router, prefix="/v1", tags=["tasks"])
