@@ -13,6 +13,7 @@ set dotenv-load := false
 mod backend "just/backend.just"
 mod frontend "just/frontend.just"
 mod docs "just/docs.just"
+mod harvester "just/harvester.just"
 
 # Copier template tooling (canonical repo only; stripped from generated projects)
 mod? template "just/template.just"

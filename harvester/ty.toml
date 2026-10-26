@@ -1,0 +1,14 @@
+[environment]
+python-version = "3.14"
+root = ["."]
+
+[src]
+include = ["src"]
+
+[rules]
+possibly-unresolved-reference = "error"
+invalid-argument-type = "error"
+invalid-assignment = "error"
+invalid-return-type = "error"
+possibly-missing-attribute = "error"
+unresolved-attribute = "error"
