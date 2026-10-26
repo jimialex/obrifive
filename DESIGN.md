@@ -2,18 +2,19 @@
 name: Obrifive
 description: Multi-tenant SaaS starter with a restrained, trustworthy product UI.
 colors:
-  teal-primary: "oklch(0.59 0.095 180.54)"
-  teal-deep: "oklch(0.468 0.074 180.8)"
-  teal-tint: "oklch(0.951 0.018 186.07)"
-  ink: "oklch(0.222 0.029 253.225)"
-  shell-background: "#edf3f3"
-  surface: "oklch(0.984 0.002 252.121)"
-  header-surface: "#f7fafa"
-  muted: "oklch(0.945 0.005 252.232)"
-  card: "oklch(1 0 0)"
-  muted-foreground: "oklch(0.558 0.025 252.534)"
-  border: "oklch(0.905 0.011 252.311)"
-  border-soft: "#e1e8e6"
+  terracotta-primary: "#A64B32"
+  terracotta-deep: "#7a3220"
+  terracotta-accent: "#D97745"
+  terracotta-tint: "#FAF6F1"
+  ink: "#44403C"
+  shell-background: "#F5EFE8"
+  surface: "#FAF6F1"
+  header-surface: "#FAF6F1"
+  muted: "#F0EAE3"
+  card: "#FFFCFA"
+  muted-foreground: "#8C7B6E"
+  border: "#D9CEC2"
+  border-soft: "#E8DDD4"
   on-primary: "oklch(1 0 0)"
   success: "oklch(0.626 0.139 155.038)"
   warning: "oklch(0.77 0.18 75.998)"
@@ -44,8 +45,12 @@ app shell.
 
 ## Visual Rules
 
-- Use teal sparingly for active state, focus and primary action.
-- Prefer cool neutral surfaces, hairline borders and near-flat elevation.
+- The palette is "Terracota & Cemento": terracotta for brand and action over
+  warm cement neutrals (cream surfaces, stone ink, sand borders).
+- Use terracotta sparingly for active state, focus and primary action. The
+  lighter accent (`#D97745`) is the primary in dark mode; in light mode it is a
+  brand alias only, not a second action color.
+- Prefer warm neutral surfaces, hairline borders and near-flat elevation.
 - Keep cards for repeated items, dialogs and genuinely framed tools.
 - Do not use decorative gradient blobs, glassmorphism, oversized heroes or generic SaaS illustration.
 - Keep text sizes proportional to the container; dashboards and settings screens need compact headings.
@@ -55,6 +60,9 @@ app shell.
 - Live tokens are in `frontend/src/app/globals.css`: raw palette variables
   (`--md3-*`) in `:root`, redefined under `.dark`, mapped to semantic Tailwind
   tokens in `@theme inline`. Values in the front matter are the light theme.
+- `--obrifive-*` variables (and their `obrifive-*` Tailwind colors) are brand
+  aliases of the same palette. Components do not consume them; use the
+  semantic tokens below.
 - Dark mode is class-based (`next-themes`, `attribute="class"`,
   `defaultTheme="system"`). Every new surface must read correctly in both themes;
   never hardcode a light-only color.
@@ -84,6 +92,11 @@ Symbols Rounded is loaded from Google Fonts for icons.
 
 Target WCAG 2.1 AA. Preserve keyboard access, visible focus rings, semantic labels,
 touch targets, reduced-motion alternatives and readable contrast.
+
+Known debt: in dark mode the primary is `#D97745` with white foreground
+(about 3.1:1). That passes for large text and UI components but fails AA for
+small text on primary buttons and badges; fixing it needs a darker dark-mode
+primary or a dark foreground, checked in both themes.
 
 Known debt: the root `viewport` in `frontend/src/app/layout.tsx` sets
 `maximumScale: 1`, which blocks pinch zoom on some mobile browsers and conflicts
