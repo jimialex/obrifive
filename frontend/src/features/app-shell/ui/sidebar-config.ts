@@ -57,6 +57,7 @@ export const sidebarConfig: SidebarConfig = {
     },
   ],
   navMain: [
+    { i18nKey: "products", url: "/products", icon: "settings" },
     {
       i18nKey: "members",
       url: "/members",
