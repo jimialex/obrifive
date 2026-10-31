@@ -1,0 +1,23 @@
+---
+title: "Catálogo de productos por tenant"
+description: "Consulta del catálogo y preparación de sus cargadores."
+icon: Package
+---
+
+<Callout title="En resumen">
+  El catálogo se determina mediante `X-Tenant`; los cargadores Excel, PDF y URL están declarados pero aún no procesan datos.
+</Callout>
+
+`GET /v1/products` limita su consulta al tenant resuelto desde el encabezado.
+La interfaz usa el BFF y conserva ese scope.
+
+```mermaid
+flowchart LR
+  UI[Productos] --> BFF[/api]
+  BFF --> API[GET /v1/products]
+  API --> Scope[X-Tenant]
+```
+
+`loader_from_excel`, `loader_from_pdf` y `loader_from_url` son puntos de
+extensión vacíos. La implementación futura debe crear ejecuciones y staging
+antes de modificar el catálogo.

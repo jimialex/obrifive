@@ -86,6 +86,7 @@ containers = [
     "src.messaging",
     "src.profile",
     "src.tenants",
+    "src.products",
     "src.users",
 ]
 layers = [
@@ -113,7 +114,7 @@ forbidden_modules = ["src.*.application"]
 name = "Shared domain does not depend on features"
 type = "forbidden"
 source_modules = ["src.common.domain.models"]
-forbidden_modules = ["src.auth", "src.users", "src.tenants", "src.assets", "src.admin", "src.profile", "src.messaging"]
+forbidden_modules = ["src.auth", "src.users", "src.tenants", "src.products", "src.assets", "src.admin", "src.profile", "src.messaging"]
 
 
 [tool.uv]

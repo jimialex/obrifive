@@ -176,7 +176,7 @@ seed-admin:
     #!/usr/bin/env bash
     set -euo pipefail
     docker compose up -d postgres >/dev/null
-    for f in directus_roles.sql directus_users.sql directus_collections.sql directus_fields.sql directus_flows.sql; do
+    for f in directus_roles.sql directus_users.sql directus_collections.sql directus_fields.sql directus_products.sql directus_flows.sql; do
         path="fixtures/admin/${f}"
         [ -f "${path}" ] || continue
         echo "→ ${f}"

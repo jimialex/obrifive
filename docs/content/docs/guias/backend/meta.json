@@ -1,4 +1,4 @@
 {
   "title": "Backend",
-  "pages": ["nuevo-modulo", "migraciones", "depuracion"]
+  "pages": ["nuevo-modulo", "migraciones", "catalogo-productos", "depuracion"]
 }
